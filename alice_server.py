@@ -2,10 +2,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import requests
-from RSA import RSA
+from PKCS1_RSA import PKCS1_RSA
 
 app = FastAPI()
-rsa = RSA(2048)
+rsa = PKCS1_RSA(2048)
 
 # Store received messages and peer's public key
 received_messages = []
@@ -58,9 +58,13 @@ async def send_message(message: Message):
         if peer_public_key["n"] is None or peer_public_key["e"] is None:
             await exchange_key()
 
-        # Convert message to integer and encrypt using peer's public key
-        message_int = rsa.string_to_int(message.content)
-        encrypted_message = pow(message_int, peer_public_key["e"], peer_public_key["n"])
+        # Create temporary RSA instance with peer's public key
+        peer_rsa = PKCS1_RSA(2048)
+        peer_rsa.n = peer_public_key["n"]
+        peer_rsa.e = peer_public_key["e"]
+        
+        # Encrypt message using peer's public key
+        encrypted_message = peer_rsa.encrypt(message.content)
         
         # Send to Bob
         response = requests.post(
