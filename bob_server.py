@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 from PKCS1_RSA import PKCS1_RSA
+from typing import List
 
 app = FastAPI()
 rsa = PKCS1_RSA(2048)
@@ -10,6 +11,7 @@ rsa = PKCS1_RSA(2048)
 # Store received messages and peer's public key
 received_messages = []
 peer_public_key = {"n": None, "e": None}
+active_connections: List[WebSocket] = []
 
 # Enable CORS
 app.add_middleware(
@@ -26,6 +28,33 @@ class Message(BaseModel):
 class PublicKey(BaseModel):
     n: str
     e: int
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # Keep connection alive
+    except:
+        manager.disconnect(websocket)
 
 @app.post("/exchange_key")
 async def exchange_key():
@@ -59,7 +88,7 @@ async def send_message(message: Message):
             await exchange_key()
 
         # Create temporary RSA instance with peer's public key
-        peer_rsa = PKCS1_RSA(2048)
+        peer_rsa = PKCS1_RSA(2048, generate_keys=False)
         peer_rsa.n = peer_public_key["n"]
         peer_rsa.e = peer_public_key["e"]
         
@@ -88,13 +117,16 @@ async def receive_message(message: Message):
         # Decrypt using our private key
         decrypted_message = rsa.decrypt(int(message.content))
         received_messages.append(decrypted_message)
+        
+        # Broadcast the new message to all connected WebSocket clients
+        await manager.broadcast(decrypted_message)
+        
         return {"status": "Message received"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) 
 
-@app.get("/messages")
-async def get_messages():
-    """Endpoint for clients to poll for new messages"""
-    return {"messages": received_messages} 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8001) 

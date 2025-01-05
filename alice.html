@@ -5,74 +5,115 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alice - RSA Chat</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #666;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center h-screen">
-    <div class="bg-white p-6 rounded shadow-md w-full max-w-2xl">
-        <h1 class="text-2xl font-bold mb-4">RSA Encrypted Chat - Alice</h1>
+<body class="bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white rounded-xl shadow-lg w-full max-w-2xl overflow-hidden">
+        <!-- Header -->
+        <div class="bg-purple-600 p-4 text-white">
+            <h1 class="text-2xl font-bold">RSA Encrypted Chat</h1>
+            <p class="text-purple-200">Logged in as Alice</p>
+        </div>
         
         <!-- Messages Container -->
-        <div id="messagesContainer" class="mb-4 h-96 overflow-y-auto border border-gray-200 rounded p-4 space-y-2">
+        <div id="messagesContainer" class="p-4 h-[500px] overflow-y-auto space-y-4 custom-scrollbar">
             <!-- Messages will be added here -->
         </div>
 
         <!-- Message Form -->
-        <form id="messageForm" class="space-y-4">
-            <div>
-                <label for="message" class="block text-sm font-medium text-gray-700">Send message to Bob</label>
+        <div class="border-t border-gray-200 p-4 bg-gray-50">
+            <form id="messageForm" class="flex gap-2">
                 <input type="text" id="message" name="message" 
-                    class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm 
-                    focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required>
-            </div>
-            <button type="submit" 
-                class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700">
-                Send to Bob
-            </button>
-        </form>
+                    placeholder="Type your message..."
+                    class="flex-1 rounded-lg border border-gray-300 px-4 py-2 
+                    focus:ring-2 focus:ring-purple-500 focus:border-transparent
+                    transition duration-200" required>
+                <button type="submit" 
+                    class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700
+                    focus:ring-2 focus:ring-offset-2 focus:ring-purple-500
+                    transition duration-200">
+                    Send
+                </button>
+            </form>
+        </div>
     </div>
 
     <script>
+        let ws = new WebSocket("ws://localhost:8000/ws");
         const messagesContainer = document.getElementById('messagesContainer');
-        let lastMessageCount = 0;
 
         function addMessage(content, type = 'sent') {
+            const messageWrapper = document.createElement('div');
+            messageWrapper.className = `flex ${type === 'sent' ? 'justify-end' : 'justify-start'}`;
+            
             const messageDiv = document.createElement('div');
-            messageDiv.className = `p-3 rounded-lg ${type === 'sent' ? 
-                'bg-indigo-100 ml-auto max-w-[80%]' : 
-                'bg-gray-100 mr-auto max-w-[80%]'}`;
-            messageDiv.textContent = content;
-            messagesContainer.appendChild(messageDiv);
+            const maxWidth = 'max-w-[70%]';
+            
+            if (type === 'sent') {
+                messageDiv.className = `${maxWidth} bg-purple-600 text-white rounded-2xl rounded-tr-sm px-4 py-2 shadow-sm`;
+                messageDiv.innerHTML = `
+                    <p class="text-xs text-purple-200 mb-1">Alice (You)</p>
+                    <p>${content}</p>
+                `;
+            } else if (type === 'received') {
+                messageDiv.className = `${maxWidth} bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-2 shadow-sm`;
+                messageDiv.innerHTML = `
+                    <p class="text-xs text-gray-500 mb-1">Bob</p>
+                    <p>${content}</p>
+                `;
+            } else { // error message
+                messageDiv.className = `${maxWidth} bg-red-100 text-red-600 rounded-2xl px-4 py-2 shadow-sm`;
+                messageDiv.innerHTML = `
+                    <p class="text-xs text-red-500 mb-1">Error</p>
+                    <p>${content}</p>
+                `;
+            }
+            
+            messageWrapper.appendChild(messageDiv);
+            messagesContainer.appendChild(messageWrapper);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
+        
+        ws.onmessage = function(event) {
+            addMessage(event.data, 'received');
+        };
 
-        // Function to check for new messages
-        async function checkNewMessages() {
-            try {
-                const response = await fetch('http://localhost:8000/messages');
-                const data = await response.json();
-                
-                // Only display new messages
-                const messages = data.messages;
-                if (messages.length > lastMessageCount) {
-                    for (let i = lastMessageCount; i < messages.length; i++) {
-                        addMessage(`Received: ${messages[i]}`, 'received');
-                    }
-                    lastMessageCount = messages.length;
-                }
-            } catch (error) {
-                console.error('Error checking messages:', error);
-            }
-        }
+        ws.onclose = function(event) {
+            console.log("WebSocket connection closed");
+            addMessage("Connection lost. Please refresh the page.", 'error');
+        };
 
-        // Check for new messages every second
-        setInterval(checkNewMessages, 1000);
+        ws.onerror = function(error) {
+            console.error("WebSocket error:", error);
+            addMessage("Connection error. Please check your connection.", 'error');
+        };
 
-        // Send message handler
         document.getElementById('messageForm').addEventListener('submit', async function(event) {
             event.preventDefault();
             const messageInput = document.getElementById('message');
             
             try {
-                addMessage(`Sent: ${messageInput.value}`, 'sent');
+                const message = messageInput.value.trim();
+                if (!message) {
+                    throw new Error('Message cannot be empty');
+                }
+
+                addMessage(message, 'sent');
 
                 const response = await fetch('http://localhost:8000/send', {
                     method: 'POST',
@@ -80,17 +121,18 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        content: messageInput.value
+                        content: message
                     })
                 });
 
                 if (!response.ok) {
-                    throw new Error('Failed to send message');
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to send message');
                 }
 
                 messageInput.value = '';
             } catch (error) {
-                addMessage(`Error: ${error.message}`, 'error');
+                addMessage(error.message, 'error');
                 console.error('Error:', error);
             }
         });

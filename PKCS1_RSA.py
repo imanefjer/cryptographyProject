@@ -2,9 +2,10 @@ from utils import mod_inverse, generate_prime
 import secrets
 
 class PKCS1_RSA:
-    def __init__(self, key_size=2048):
+    def __init__(self, key_size=2048, generate_keys=True):
         self.key_size = key_size
-        self.generate_keys()
+        if generate_keys:
+            self.generate_keys()
 
     def generate_keys(self):
         """Generate public and private keys (GEN algorithm)."""
