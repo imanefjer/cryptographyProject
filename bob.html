@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bob - RSA Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+    <div class="bg-white p-6 rounded shadow-md w-full max-w-2xl">
+        <h1 class="text-2xl font-bold mb-4">RSA Encrypted Chat - Bob</h1>
+        
+        <!-- Messages Container -->
+        <div id="messagesContainer" class="mb-4 h-96 overflow-y-auto border border-gray-200 rounded p-4 space-y-2">
+            <!-- Messages will be added here -->
+        </div>
+
+        <!-- Message Form -->
+        <form id="messageForm" class="space-y-4">
+            <div>
+                <label for="message" class="block text-sm font-medium text-gray-700">Send message to Alice</label>
+                <input type="text" id="message" name="message" 
+                    class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm 
+                    focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required>
+            </div>
+            <button type="submit" 
+                class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700">
+                Send to Alice
+            </button>
+        </form>
+    </div>
+
+    <script>
+        const messagesContainer = document.getElementById('messagesContainer');
+        let lastMessageCount = 0;
+
+        function addMessage(content, type = 'sent') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `p-3 rounded-lg ${type === 'sent' ? 
+                'bg-indigo-100 ml-auto max-w-[80%]' : 
+                'bg-gray-100 mr-auto max-w-[80%]'}`;
+            messageDiv.textContent = content;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Function to check for new messages
+        async function checkNewMessages() {
+            try {
+                const response = await fetch('http://localhost:8001/messages');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch messages');
+                }
+                const data = await response.json();
+                
+                // Only display new messages
+                const messages = data.messages;
+                if (messages.length > lastMessageCount) {
+                    for (let i = lastMessageCount; i < messages.length; i++) {
+                        addMessage(`Received: ${messages[i]}`, 'received');
+                    }
+                    lastMessageCount = messages.length;
+                }
+            } catch (error) {
+                console.error('Error checking messages:', error);
+            }
+        }
+
+        // Check for new messages every second
+        setInterval(checkNewMessages, 1000);
+
+        // Send message handler
+        document.getElementById('messageForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const messageInput = document.getElementById('message');
+            
+            try {
+                if (!messageInput.value.trim()) {
+                    throw new Error('Message cannot be empty');
+                }
+
+                addMessage(`Sent: ${messageInput.value}`, 'sent');
+
+                const response = await fetch('http://localhost:8001/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        content: messageInput.value
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to send message');
+                }
+
+                messageInput.value = '';
+            } catch (error) {
+                addMessage(`Error: ${error.message}`, 'error');
+                console.error('Error:', error);
+            }
+        });
+    </script>
+</body>
+</html> 
