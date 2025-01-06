@@ -4,6 +4,9 @@ from pydantic import BaseModel
 import requests
 from PKCS1_RSA import PKCS1_RSA
 from typing import List
+from fastapi.responses import FileResponse
+import requests
+
 
 app = FastAPI()
 rsa = PKCS1_RSA(2048)
@@ -12,6 +15,10 @@ rsa = PKCS1_RSA(2048)
 received_messages = []
 peer_public_key = {"n": None, "e": None}
 active_connections: List[WebSocket] = []
+
+@app.get("/")
+async def serve_bob_html():
+    return FileResponse("bob.html")
 
 # Enable CORS
 app.add_middleware(
@@ -64,6 +71,11 @@ async def exchange_key():
             "http://localhost:8000/receive_key",
             json={"n": str(rsa.n), "e": rsa.e}
         )
+        # Notify Eve
+        requests.post(
+            "http://localhost:8002/intercept_key_exchange",
+            json={"n": str(rsa.n), "e": rsa.e, "sender": "Bob"}
+        )
         if response.status_code == 200:
             key_data = response.json()
             peer_public_key["n"] = int(key_data["n"])
@@ -100,6 +112,13 @@ async def send_message(message: Message):
             "http://localhost:8000/receive",
             json={"content": str(encrypted_message)}
         )
+        # Forward encrypted message to Eve
+        requests.post(
+    "http://localhost:8002/intercept",
+    json={"content": str(encrypted_message), "sender": "Bob"}
+)
+
+        # here we are just making eve eavsdropping "man in the middle" wihtout going through proxy
         
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to send message to Alice")

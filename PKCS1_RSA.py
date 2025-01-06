@@ -74,6 +74,10 @@ class PKCS1_RSA:
         
         message_bytes = self.unpad(padded_message)
         return message_bytes.decode('utf-8')
+    
+    def int_to_string(self, message_int: int) -> str:
+        """Convert an integer back to a string message."""
+        return message_int.to_bytes((message_int.bit_length() + 7) // 8, byteorder='big').decode('utf-8')
 
 if __name__ == "__main__":
     rsa = PKCS1_RSA(2048)
