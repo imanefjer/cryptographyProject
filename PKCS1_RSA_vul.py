@@ -3,7 +3,7 @@ import secrets
 
 
 
-class PKCS1_RSA:
+class PKCS1_RSA_vul:
     def __init__(self, key_size=64, generate_keys=True):
         self.key_size = key_size
         if generate_keys:
